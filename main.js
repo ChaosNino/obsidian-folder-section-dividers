@@ -1,27 +1,24 @@
-/* main.js (v4.3 极简前缀匹配版) */
-const { Plugin, PluginSettingTab, Setting, debounce } = require('obsidian');
+/* main.js (v4.5 语法修复版) */
+const { Plugin, PluginSettingTab, Setting, debounce, Platform } = require('obsidian');
 
-// --- 1. 定义多语言词典 (Define Translation Dictionary) ---
+// --- 多语言支持 ---
 const TRANSLATIONS = {
     'en': {
         commandName: 'Refresh section styles',
         settingsTitle: 'Folder Section Settings',
         ruleConfigName: 'Rule Configuration',
-        // 修改说明：不再提及正则，强调前缀匹配
-        ruleConfigDesc: 'Format: Folder Prefix:Section Title. (Matches if folder name starts with the prefix)',
-        placeholder: '00_:Inbox\n01_:Projects\nDaily:Journal'
+        ruleConfigDesc: 'Format: Prefix:Title (e.g., 00_:Inbox)',
+        placeholder: '00_:Inbox\n01_:Projects'
     },
     'zh': {
         commandName: '刷新分区样式',
         settingsTitle: '文件夹分节设置',
         ruleConfigName: '分节规则配置',
-        // 修改说明：不再提及正则，强调前缀匹配
-        ruleConfigDesc: '格式：文件夹前缀:分节标题 (例如输入 "00_" 可匹配 "00_Inbox" 或 "00_收集箱")',
-        placeholder: '00_:流入区\n01_:项目区\nDaily:日记'
+        ruleConfigDesc: '格式：前缀:标题 (例如 "00_" 匹配 "00_Inbox")',
+        placeholder: '00_:流入区\n01_:项目区'
     }
 };
 
-// --- 2. 简单的翻译辅助函数 ---
 function t(key) {
     const lang = window.localStorage.getItem('language') || 'en';
     const validLang = lang.startsWith('zh') ? 'zh' : 'en';
@@ -29,7 +26,6 @@ function t(key) {
 }
 
 const DEFAULT_SETTINGS = {
-    // 默认值改为更直观的前缀形式
     rulesText: '00_:Inbox\n01_:Projects\n02_:Areas\n08_:Resources\n09_:Archives',
     rules: []
 };
@@ -37,27 +33,46 @@ const DEFAULT_SETTINGS = {
 module.exports = class FolderSectionPlugin extends Plugin {
     async onload() {
         this.isProcessing = false;
+        this.observer = null;
+
         await this.loadSettings();
         this.addSettingTab(new FolderSectionSettingTab(this.app, this));
 
         this.addCommand({
             id: 'refresh-folder-sections',
             name: t('commandName'),
-            callback: () => this.applyClasses()
+            callback: () => {
+                this.applyClasses();
+            }
         });
 
         this.app.workspace.onLayoutReady(() => {
-            setTimeout(() => this.applyClasses(), 800);
-            this.registerDomObserver();
+            const initDelay = Platform.isMobile ? 1500 : 800;
+            
+            // 多轮尝试机制 (箭头函数写法优化，防止语法歧义)
+            setTimeout(() => { this.tryInitialize(); }, initDelay);
+            setTimeout(() => { this.tryInitialize(); }, 3000);
+            setTimeout(() => { this.tryInitialize(); }, 5000);
         });
+    }
+
+    tryInitialize() {
+        this.applyClasses();
+        if (!this.observer) {
+            this.registerDomObserver();
+        }
     }
 
     onunload() {
         this.removeClasses();
         if (this.observer) this.observer.disconnect();
+        this.observer = null;
     }
 
     registerDomObserver() {
+        const leaves = this.app.workspace.getLeavesOfType('file-explorer');
+        if (leaves.length === 0) return;
+
         const debouncedApply = debounce(() => {
             if (!this.isProcessing) {
                 this.applyClasses();
@@ -68,11 +83,8 @@ module.exports = class FolderSectionPlugin extends Plugin {
             debouncedApply();
         });
 
-        const leaves = this.app.workspace.getLeavesOfType('file-explorer');
-        if (leaves.length > 0) {
-            const view = leaves[0].view;
-            this.observer.observe(view.containerEl, { childList: true, subtree: true, attributes: false });
-        }
+        const view = leaves[0].view;
+        this.observer.observe(view.containerEl, { childList: true, subtree: true, attributes: false });
     }
 
     applyClasses() {
@@ -87,6 +99,7 @@ module.exports = class FolderSectionPlugin extends Plugin {
         
         const view = leaves[0].view;
         const filesContainer = view.containerEl.querySelector('.nav-files-container');
+        
         if (!filesContainer) {
             this.isProcessing = false;
             return;
@@ -96,7 +109,7 @@ module.exports = class FolderSectionPlugin extends Plugin {
         const taggedSections = new Set();
 
         allFolders.forEach(folderEl => {
-            // 严格检查是否为根目录
+            // 严格根目录检查
             if (!this.isRootFolder(folderEl, filesContainer)) {
                 folderEl.removeAttribute('data-section-title');
                 folderEl.classList.remove('is-section-start');
@@ -110,9 +123,7 @@ module.exports = class FolderSectionPlugin extends Plugin {
             let matchedTitle = null;
 
             for (const rule of this.settings.rules) {
-                // --- 核心修改：使用 startsWith 替代正则 ---
-                // 只要文件夹名是以配置的 prefix 开头，就算匹配成功
-                // 输入 "Box" 不会匹配 "Inbox"，但会匹配 "BoxProject"
+                // 前缀匹配
                 if (folderName.startsWith(rule.prefix)) {
                     matchedTitle = rule.title;
                     break;
@@ -120,7 +131,6 @@ module.exports = class FolderSectionPlugin extends Plugin {
             }
 
             if (matchedTitle) {
-                // 确保同一个分节标题只出现一次（如果你希望每个匹配的文件夹都显示，可以去掉这个 if 判断）
                 if (!taggedSections.has(matchedTitle)) {
                     folderEl.setAttribute('data-section-title', matchedTitle);
                     folderEl.classList.add('is-section-start');
@@ -151,10 +161,12 @@ module.exports = class FolderSectionPlugin extends Plugin {
 
     removeClasses() {
         const folders = document.querySelectorAll('.nav-folder.is-section-start');
-        folders.forEach(el => {
-            el.classList.remove('is-section-start');
-            el.removeAttribute('data-section-title');
-        });
+        if (folders) {
+            folders.forEach(el => {
+                el.classList.remove('is-section-start');
+                el.removeAttribute('data-section-title');
+            });
+        }
     }
 
     async loadSettings() {
@@ -176,11 +188,9 @@ module.exports = class FolderSectionPlugin extends Plugin {
         const lines = this.settings.rulesText.split('\n');
         this.settings.rules = lines
             .map(line => {
-                // 简单的分割逻辑
                 const parts = line.split(':');
                 if (parts.length >= 2) {
                     return {
-                        // 使用 prefix 语义更清晰
                         prefix: parts[0].trim(),
                         title: parts.slice(1).join(':').trim()
                     };
