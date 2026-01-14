@@ -1,4 +1,4 @@
-/* main.js (v4.2 双语自适应版) */
+/* main.js (v4.3 极简前缀匹配版) */
 const { Plugin, PluginSettingTab, Setting, debounce } = require('obsidian');
 
 // --- 1. 定义多语言词典 (Define Translation Dictionary) ---
@@ -7,31 +7,30 @@ const TRANSLATIONS = {
         commandName: 'Refresh section styles',
         settingsTitle: 'Folder Section Settings',
         ruleConfigName: 'Rule Configuration',
-        ruleConfigDesc: 'Format: Regex:Section Title (e.g., ^0[0-9]_:Inbox)',
-        placeholder: '^0[0-9]_:Inbox\n^1[0-9]_:Projects'
+        // 修改说明：不再提及正则，强调前缀匹配
+        ruleConfigDesc: 'Format: Folder Prefix:Section Title. (Matches if folder name starts with the prefix)',
+        placeholder: '00_:Inbox\n01_:Projects\nDaily:Journal'
     },
     'zh': {
         commandName: '刷新分区样式',
         settingsTitle: '文件夹分节设置',
         ruleConfigName: '分节规则配置',
-        ruleConfigDesc: '格式：正则表达式:分节标题 (例如：^0[0-9]_:流入区)',
-        placeholder: '^0[0-9]_:流入区\n^1[0-9]_:项目区'
+        // 修改说明：不再提及正则，强调前缀匹配
+        ruleConfigDesc: '格式：文件夹前缀:分节标题 (例如输入 "00_" 可匹配 "00_Inbox" 或 "00_收集箱")',
+        placeholder: '00_:流入区\n01_:项目区\nDaily:日记'
     }
 };
 
-// --- 2. 简单的翻译辅助函数 (Helper to pick language) ---
+// --- 2. 简单的翻译辅助函数 ---
 function t(key) {
     const lang = window.localStorage.getItem('language') || 'en';
-    // 简单判断：如果是 zh-cn 或 zh-tw 都算 zh，否则默认 en
-    // Simple check: treat zh-cn/zh-tw as 'zh', others as 'en'
     const validLang = lang.startsWith('zh') ? 'zh' : 'en';
     return TRANSLATIONS[validLang][key] || TRANSLATIONS['en'][key];
 }
 
 const DEFAULT_SETTINGS = {
-    // 默认值保留英文示例，因为这是新安装时的默认状态
-    // Default settings use English examples
-    rulesText: '^0[0-9]_:Inbox\n^1[0-9]_:Projects\n^2[0-9]_:Areas\n^8[0-9]_:Resources\n^9[0-9]_:Archives',
+    // 默认值改为更直观的前缀形式
+    rulesText: '00_:Inbox\n01_:Projects\n02_:Areas\n08_:Resources\n09_:Archives',
     rules: []
 };
 
@@ -43,7 +42,7 @@ module.exports = class FolderSectionPlugin extends Plugin {
 
         this.addCommand({
             id: 'refresh-folder-sections',
-            name: t('commandName'), // <--- 使用翻译函数 (Use translation)
+            name: t('commandName'),
             callback: () => this.applyClasses()
         });
 
@@ -97,7 +96,7 @@ module.exports = class FolderSectionPlugin extends Plugin {
         const taggedSections = new Set();
 
         allFolders.forEach(folderEl => {
-            // 严格检查是否为根目录 (Strict Root Check)
+            // 严格检查是否为根目录
             if (!this.isRootFolder(folderEl, filesContainer)) {
                 folderEl.removeAttribute('data-section-title');
                 folderEl.classList.remove('is-section-start');
@@ -111,15 +110,17 @@ module.exports = class FolderSectionPlugin extends Plugin {
             let matchedTitle = null;
 
             for (const rule of this.settings.rules) {
-                try {
-                    if (new RegExp(rule.regex).test(folderName)) {
-                        matchedTitle = rule.title;
-                        break;
-                    }
-                } catch (e) {}
+                // --- 核心修改：使用 startsWith 替代正则 ---
+                // 只要文件夹名是以配置的 prefix 开头，就算匹配成功
+                // 输入 "Box" 不会匹配 "Inbox"，但会匹配 "BoxProject"
+                if (folderName.startsWith(rule.prefix)) {
+                    matchedTitle = rule.title;
+                    break;
+                }
             }
 
             if (matchedTitle) {
+                // 确保同一个分节标题只出现一次（如果你希望每个匹配的文件夹都显示，可以去掉这个 if 判断）
                 if (!taggedSections.has(matchedTitle)) {
                     folderEl.setAttribute('data-section-title', matchedTitle);
                     folderEl.classList.add('is-section-start');
@@ -175,10 +176,12 @@ module.exports = class FolderSectionPlugin extends Plugin {
         const lines = this.settings.rulesText.split('\n');
         this.settings.rules = lines
             .map(line => {
+                // 简单的分割逻辑
                 const parts = line.split(':');
                 if (parts.length >= 2) {
                     return {
-                        regex: parts[0].trim(),
+                        // 使用 prefix 语义更清晰
+                        prefix: parts[0].trim(),
                         title: parts.slice(1).join(':').trim()
                     };
                 }
@@ -197,7 +200,6 @@ class FolderSectionSettingTab extends PluginSettingTab {
     display() {
         const { containerEl } = this;
         containerEl.empty();
-        // <--- 使用翻译函数 (Use translation)
         containerEl.createEl('h2', { text: t('settingsTitle') });
         new Setting(containerEl)
             .setName(t('ruleConfigName'))
