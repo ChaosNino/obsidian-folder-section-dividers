@@ -1,0 +1,10 @@
+{
+    "id": "folder-section-dividers",
+    "name": "Folder Section Dividers",
+    "version": "1.2.0",
+    "minAppVersion": "0.15.0",
+    "description": "Adds visual section dividers to root folders based on name prefixes.|为根目录文件夹根据名称前缀添加视觉分节。",
+    "author": "Chaos&Gemini",
+    "authorUrl": "https://github.com/ChaosNino/obsidian-folder-section-dividers",
+    "isDesktopOnly": false
+}

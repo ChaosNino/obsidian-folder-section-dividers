@@ -1,0 +1,47 @@
+/* --- 核心容器设置 --- */
+.nav-folder.is-section-start {
+    /* 【参数 1】上方间距：控制分节标题距离“上一个文件夹”有多远 */
+    /* 觉得太挤就改大 (如 40px)，觉得太空就改小 (如 24px) */
+    margin-top: 32px !important; 
+    
+    position: relative; 
+    
+    /* 分割线：如果不想要线条，把下面这行删掉即可 */
+    border-top: 1px solid var(--background-modifier-border);
+}
+
+/* --- 标题文字设置 --- */
+.nav-folder.is-section-start::after {
+    /* 获取标题内容 */
+    content: attr(data-section-title);
+    
+    position: absolute;
+    
+    /* 【参数 2】垂直定位：控制标题文字放在留白区域的哪个位置 */
+    /* 负数绝对值越大，文字越往上跑；绝对值越小，越靠近下面的文件夹 */
+    /* 推荐公式：绝对值 ≈ margin-top 的值 减去 8px 左右 */
+    top: -22px; 
+    
+    /* 【参数 3】左侧缩进：控制文字是否跟文件夹的箭头对齐 */
+    /* 如果觉得文字太靠左，尝试改为 10px 或 15px */
+    padding-left: 2px; 
+    
+    /* 宽度撑满，防止换行 */
+    width: 100%;
+    display: block;
+    
+    /* --- 字体美化 (可根据喜好调整) --- */
+    font-size: 0.85em;        /* 字体大小 */
+    font-weight: 600;         /* 粗细：400是正常，600是粗体 */
+    color: var(--text-muted); /* 颜色：使用主题默认的灰色 */
+    letter-spacing: 0.05em;   /* 字间距 */
+    line-height: 1.5;         /* 行高 */
+    pointer-events: none;     /* 让鼠标穿透，点击标题不影响操作 */
+}
+
+/* --- 特殊处理：列表第一个标题 --- */
+/* 如果是整个列表的第一个文件夹，不需要上面的分割线，稍微紧凑一点 */
+.nav-files-container > .nav-folder.is-section-start:first-child {
+    border-top: none;
+    margin-top: 20px !important; /* 第一个可以稍微近一点 */
+}
