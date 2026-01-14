@@ -1,4 +1,4 @@
-# obsidian-folder-section-dividers
+# Folder Section Dividers
 
 Adds visual section dividers to root folders based on name prefixes. 
 
